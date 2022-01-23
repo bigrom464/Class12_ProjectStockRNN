@@ -1,21 +1,16 @@
 #import packages
 import pandas as pd
 import numpy as np
+from PyQt5 import QtCore as qtc
 
 from sklearn.preprocessing import MinMaxScaler
 
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, LSTM
+from keras.layers import Dense, LSTM
 
-import matplotlib.pyplot as plt
 from matplotlib.pylab import rcParams
-from matplotlib.figure import Figure
 
 import yfinance as yf
-
-
-def formatDate(date):
-    return date.split(' ')[0]
 
 
 def getMaxDate(date):
@@ -31,36 +26,41 @@ def getMaxDate(date):
     else:
         lastday = '30'
     date = date[:8] + lastday
+    today = qtc.QDate.currentDate().toString(qtc.Qt.ISODate)
+    if date > today:  # Checking for edge case
+        return today
     return date
 
+
 def getPlotData(ticker, startDate, endDate):
-    df = yf.download(ticker)  # get stock data from Yahoo! Finance
-    # if not df.empty:
-    df.to_csv(ticker+'.csv')
+    df = yf.download(ticker)  # Get stock data from Yahoo! Finance
+    df.to_csv(ticker + '.csv')
     df = pd.read_csv(ticker + '.csv', skiprows=[])
-    df['Date'] = pd.to_datetime(df.Date, format='%Y-%m-%d')  # format data
+    df['Date'] = pd.to_datetime(df.Date, format='%Y-%m-%d')  # Format data
     df.index = df['Date']
-    return df[startDate: endDate]
+    return df[startDate: endDate]['Close']
 
 
-def getIPO(ticker='TSLA'):  # find first valid traded date on stock exchange
+def getIPO(ticker='TSLA'):  # Find first valid traded date on stock exchange
     df = yf.download(ticker)
-    df.to_csv(ticker+'.csv')
-    df = pd.read_csv(ticker+'.csv', skiprows=[])
-    df['Date'] = pd.to_datetime(df.Date, format='%Y-%m-%d')
-    df.index = df['Date']
-    return formatDate(str(df['Date'][0]))
+    if not df.empty:
+        df.to_csv(ticker+'.csv')
+        df = pd.read_csv(ticker+'.csv', skiprows=[])
+        df['Date'] = pd.to_datetime(df.Date, format='%Y-%m-%d')
+        df.index = df['Date']
+        return str(df['Date'][0]).split(' ')[0]
+    return ''
 
 
 def predict(ticker):
     rcParams['figure.figsize'] = 20, 10
     scaler = MinMaxScaler(feature_range=(0, 1))
 
-    df = yf.download(ticker)  # get stock data from Yahoo! Finance
+    df = yf.download(ticker)  # Get stock data from Yahoo! Finance
     df.to_csv(ticker+'.csv')
     df = pd.read_csv(ticker+'.csv', skiprows=[])
-    df['Date'] = pd.to_datetime(df.Date, format='%Y-%m-%d')  # format data
-    df.index = df['Date']  # index data on date for plotting
+    df['Date'] = pd.to_datetime(df.Date, format='%Y-%m-%d')  # Format data
+    df.index = df['Date']  # Index data on date for plotting
 
     data = df.sort_index(ascending=True, axis=0)
     new_data = pd.DataFrame(index=range(0, len(df)), columns=['Date', 'Close'])
@@ -72,25 +72,25 @@ def predict(ticker):
     new_data.drop('Date', axis=1, inplace=True)
 
     dataset = new_data.values
-    # divide data into training and validation sets
+    # Divide data into training and validation sets
     train = dataset[0: int(0.6 * len(df)), :]
     valid = dataset[int(0.6 * len(df)):, :]
     scaler = MinMaxScaler(feature_range=(0, 1))
-    scaled_data = scaler.fit_transform(dataset)  # pre-process data
+    scaled_data = scaler.fit_transform(dataset)  # Pre-process data
 
     x_train, y_train = [], []
     for i in range(60, len(train)):
-        x_train.append(scaled_data[i-60:i, 0])
+        x_train.append(scaled_data[i-60: i, 0])
         y_train.append(scaled_data[i, 0])
     x_train, y_train = np.array(x_train), np.array(y_train)
 
     x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
-    # create data which is ready for model
+    # Create data which is ready for model
 
-    model = Sequential()  # create a sequential model
+    model = Sequential()  # Create a sequential model
     model.add(LSTM(units=50, return_sequences=True,
               input_shape=(x_train.shape[1], 1)))
-    model.add(LSTM(units=50))  # add LSTM units
+    model.add(LSTM(units=50))  # Add LSTM units
     model.add(Dense(1))
 
     model.compile(loss='mean_squared_error', optimizer='adam')
@@ -102,11 +102,11 @@ def predict(ticker):
 
     x_test = []
     for i in range(60, inputs.shape[0]):
-        x_test.append(inputs[i-60:i, 0])
+        x_test.append(inputs[i-60: i, 0])
     x_test = np.array(x_test)
     x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
 
-    # use model to get predicted closing prices
+    # Use model to get predicted closing prices
     closing_price = model.predict(x_test)
     closing_price = scaler.inverse_transform(closing_price)
     rms = np.sqrt(np.mean(np.power((valid-closing_price), 2)))
@@ -114,5 +114,4 @@ def predict(ticker):
     train = new_data[0: int(0.6 * len(df))]
     valid = new_data[int(0.6 * len(df)):]
     valid['Predictions'] = closing_price
-    print(valid[['Close', 'Predictions']])
     return valid[['Close', 'Predictions']]
