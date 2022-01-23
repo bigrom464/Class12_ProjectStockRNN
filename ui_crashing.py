@@ -1,105 +1,60 @@
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
-from matplotlib.figure import Figure
 from PyQt5 import QtCore as qtc, QtGui as qtg, QtWidgets as qtw
-import stock_model
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas, NavigationToolbar2QT as NavigationToolbar
+
 import sys
-import matplotlib
-matplotlib.use('Qt5Agg')
+import yfinance as yf
+import pandas as pd
+import matplotlib.pyplot as plt
 
-class MplCanvas(FigureCanvasQTAgg):
+import stock_model as sm
 
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
-        fig = Figure(figsize=(width, height), dpi=dpi)
-        self.axes = fig.add_subplot(111)
-        super(MplCanvas, self).__init__(fig)
 
 class GraphWindow(qtw.QMainWindow):
-    def __init__(self, *args, **kwargs):
-        super(GraphWindow, self).__init__(*args, **kwargs)
+    def __init__(self, dataframe, parent=None):
+        super(GraphWindow, self).__init__(parent)
 
-        sc = MplCanvas(self, width=5, height=4, dpi=100)
-        # sc.plot(plotpoints, label="Close Price History")
-        sc.axes.plot([0, 1, 2, 3, 4], [10, 1, 20, 3, 40])
-        toolbar = NavigationToolbar(sc, self)
+        self.figure = plt.figure()
+        self.canvas = FigureCanvas(self.figure)
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        self.df = dataframe['Close']
 
+        # creating a Vertical Box layout
         layout = qtw.QVBoxLayout()
-        layout.addWidget(toolbar)
-        layout.addWidget(sc)
+        layout.addWidget(self.toolbar)
+        layout.addWidget(self.canvas)
 
         widget = qtw.QWidget()
         widget.setLayout(layout)
         self.setCentralWidget(widget)
-        self.show()
+        self.plot()
 
+    # To plot the points from self.df
+    def plot(self):
+        # clearing old figure
+        self.figure.clear()
+        # create an axis
+        ax = self.figure.add_subplot(111)
+        # plot data
+        ax.plot(self.df)
+        self.canvas.draw()
 
-class InputWindow(qtw.QMainWindow):
-    def __init__(self, *args, **kwargs):
-        super(InputWindow, self).__init__(*args, **kwargs)
-
-        box = qtw.QVBoxLayout()
-        box.addSpacerItem(qtw.QSpacerItem(80, 80))
-
-        label = qtw.QLabel(args[0])
-        label.setFont(qtg.QFont('Calibri', 14))
-        box.addWidget(label)
-
-        inp = qtw.QLineEdit(placeholderText=args[1])
-        inp.setMinimumHeight(40)
-        box.addWidget(inp)
-
-        actions = qtw.QHBoxLayout()
-        run = qtw.QPushButton(
-            args[2], clicked=lambda: run_action())
-        run.setMinimumHeight(40)
-        change = qtw.QPushButton(
-            "Change", clicked=lambda: change_action())
-        change.setMinimumHeight(40)
-        change.setDisabled(True)
-
-        actions.addWidget(run)
-        actions.addWidget(change)
-        box.addLayout(actions)
-
-        box.addSpacerItem(qtw.QSpacerItem(80, 80))
-        box.insertStretch(-1, 1)
-
-        def run_action():
-            if input.text() == "":
-                showDialog()
-            else:
-                inp.setDisabled(True)
-                run.setDisabled(True)
-                change.setDisabled(False)
-
-                # TODO: Integrate Code
-                # self.graph1 = GraphWindow()
-                # grid.addWidget(self.graph1, 1, 0)
-
-        def change_action():
-            inp.setDisabled(False)
-            inp.clear()
-            run.setDisabled(False)
-            change.setDisabled(True)
-
-            self.graph1.close()
-
-        def showDialog():
-            dig = qtw.QMessageBox()
-            dig.setIcon(qtw.QMessageBox.Information)
-
-            dig.setText("Invalid Input. Please Try Again")
-            dig.setWindowTitle("Error")
-            dig.setStandardButtons(qtw.QMessageBox.Ok)
-            dig.exec_()
+    # To close the graph
+    def close(self):
+        self.toolbar.close()
+        self.canvas.close()
 
 
 class MainWidget(qtw.QWidget):
     def __init__(self):
         super().__init__()
 
-        grid = qtw.QGridLayout()
+        self.setWindowTitle(
+            "Foresight | A Python Stock Prediction Application")
 
-        # Create Ticker Input Box
+        self.predictGraph = self.searchGraph = self.ticker = self.date = None
+        grid = qtw.QGridLayout()  # initialize base layout
+
+        # Create Create ticker Input Box including: Title, Input Box, Buttons
         ticker_box = qtw.QVBoxLayout()
         ticker_box.addSpacerItem(qtw.QSpacerItem(80, 80))
 
@@ -107,9 +62,7 @@ class MainWidget(qtw.QWidget):
         label.setFont(qtg.QFont('Calibri', 14))
         ticker_box.addWidget(label)
 
-        ticker_input = qtw.QLineEdit(
-            placeholderText='Enter Stock Ticker...',
-        )
+        ticker_input = qtw.QLineEdit(placeholderText='Enter Stock Ticker...')
         ticker_input.setMinimumHeight(40)
         ticker_box.addWidget(ticker_input)
 
@@ -128,25 +81,21 @@ class MainWidget(qtw.QWidget):
 
         ticker_box.addSpacerItem(qtw.QSpacerItem(80, 80))
         ticker_box.insertStretch(-1, 1)
-        # ticker_box = InputWindow(
-        # 'Stock Ticker', 'Enter Stock Ticker...', 'Run')
+
         grid.addLayout(ticker_box, 0, 0)
 
-        # Create Date Search Input Box
+        # Create date search Input Box including: Title, Input Box, Buttons
         date_box = qtw.QVBoxLayout()
         date_box.addSpacerItem(qtw.QSpacerItem(80, 80))
 
-        label = qtw.QLabel("Fetch/Predict Stock Value")
+        label = qtw.QLabel("Search Stock Value [Month]")
         label.setFont(qtg.QFont('Calibri', 14))
         date_box.addWidget(label)
-        ticker='TSLA'
-        date_input = qtw.QLineEdit(
-            # TODO Get IPO Date
-            placeholderText='mm/dd/yyyy after {}'.format(stock_model.get_ipo(ticker)),
-            # qtc.QDate.currentDate().toString(qtc.Qt.ISODate)
-        )
+
+        date_input = qtw.QLineEdit(placeholderText='yyyy-mm-dd between {} and {}'.format(
+            sm.getIPO(), qtc.QDate.currentDate().toString(qtc.Qt.ISODate)))
         date_input.setValidator(qtg.QRegExpValidator(
-            qtc.QRegExp('\d{2}\/\d{2}\/\d{4}')))
+            qtc.QRegExp('\d{4}\-\d{2}\-\d{2}')))
         date_input.setMinimumHeight(40)
         date_box.addWidget(date_input)
 
@@ -167,53 +116,64 @@ class MainWidget(qtw.QWidget):
         date_box.insertStretch(-1, 1)
         grid.addLayout(date_box, 0, 1)
 
-        self.setLayout(grid)
-        self.setWindowTitle(
-            "Foresight | A Python Stock Prediction Application")
-
-        self.graph1 = self.graph2 = None
+        self.setLayout(grid)  # Set grid as main layout
 
         def run_ticker():
             if ticker_input.text() == "":
-                showdialog()
+                showDialog()  # Display dialog on invalid input
             else:
+                # Disable further input during processing
                 ticker_input.setDisabled(True)
                 ticker_run.setDisabled(True)
                 ticker_change.setDisabled(False)
-                ticker=ticker_input.text()
-                # TODO: Integrate Code
-                self.graph1 = GraphWindow()
-                grid.addWidget(self.graph1.canvas, 1, 0)
 
-        def change_ticker():
-            ticker_input.setDisabled(False)
+                self.ticker = ticker_input.text()
+                ipo = sm.getIPO(self.ticker)
+                today = qtc.QDate.currentDate().toString(qtc.Qt.ISODate)
+
+                date_input.setPlaceholderText('yyyy-mm-dd between {} and {}'.format(
+                    ipo, today))  # Change valid dates according to IPO
+
+                # Plot real and then predicted values
+                self.predictGraph = GraphWindow(
+                    sm.getPlotData(self.ticker, ipo, today))
+                grid.addWidget(self.predictGraph, 1, 0)  # Add to layout
+
+        def change_ticker():  # Change ticker
             ticker_input.clear()
+            self.ticker = ""
+
+            ticker_input.setDisabled(False)  # Allow user to change input
             ticker_run.setDisabled(False)
             ticker_change.setDisabled(True)
 
-            self.graph1.close()
+            self.predictGraph.close()  # Close displayed graph
 
         def run_date():
             if date_input.text() == "":
-                showdialog()
+                showDialog()  # Display dialog on invalid input
             else:
+                # Disable further input during processing
                 date_input.setDisabled(True)
                 date_run.setDisabled(True)
                 date_change.setDisabled(False)
 
-                # TODO: Integrate Code
-                self.graph2 = GraphWindow()  # TODO: pass dataframe
-                grid.addWidget(self.graph2, 1, 1)
+                self.date = date_input.text()
+                self.searchGraph = GraphWindow(
+                    sm.getPlotData(self.ticker, self.date[:8] + '01', sm.getMaxDate(self.date)))  # Plot zoomed in graph
+                grid.addWidget(self.searchGraph, 1, 1)  # Add to layout
 
-        def change_date():
-            date_input.setDisabled(False)
+        def change_date():  # Change date for zoom
             date_input.clear()
+            self.date = ""
+
+            date_input.setDisabled(False)  # Allow user to change input
             date_run.setDisabled(False)
             date_change.setDisabled(True)
 
-            self.graph2.close()
+            self.searchGraph.close()  # Close displayed graph
 
-        def showdialog():
+        def showDialog():  # Display Error on Invalid Input
             msg = qtw.QMessageBox()
             msg.setIcon(qtw.QMessageBox.Information)
 
@@ -223,12 +183,13 @@ class MainWidget(qtw.QWidget):
             msg.exec_()
 
 
+# Main Function
 if __name__ == "__main__":
     app = qtw.QApplication([])
 
     widget = MainWidget()
     widget.setFixedHeight(750)
-    widget.setFixedWidth(1250)
-    widget.show()
+    widget.setFixedWidth(1800)
+    widget.show()  # Display MainWidget
 
-    sys.exit(app.exec_())
+    sys.exit(app.exec_())  # Execute PyQt Application
