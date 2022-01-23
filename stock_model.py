@@ -31,7 +31,7 @@ def getMaxDate(date):
     else:
         lastday = '30'
     date = date[:8] + lastday
-
+    return date
 
 def getPlotData(ticker, startDate, endDate):
     df = yf.download(ticker)  # get stock data from Yahoo! Finance
@@ -114,5 +114,5 @@ def predict(ticker):
     train = new_data[0: int(0.6 * len(df))]
     valid = new_data[int(0.6 * len(df)):]
     valid['Predictions'] = closing_price
-
-    return train['Close'], valid[['Close', 'Predictions']]
+    print(valid[['Close', 'Predictions']])
+    return valid[['Close', 'Predictions']]

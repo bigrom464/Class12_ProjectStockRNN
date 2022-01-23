@@ -7,7 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 import stock_model as sm
-
+prediction=[]
 
 class GraphWindow(qtw.QMainWindow):
     def __init__(self, dataframe, parent=None):
@@ -35,8 +35,11 @@ class GraphWindow(qtw.QMainWindow):
         # create an axis
         ax = self.figure.add_subplot(111)
         # plot data
+        
         ax.plot(self.df)
+        ax.plot(predictions)
         self.canvas.draw()
+        
 
     # To close the graph
     def close(self):
@@ -129,6 +132,7 @@ class MainWidget(qtw.QWidget):
 
                 self.ticker = ticker_input.text()
                 ipo = sm.getIPO(self.ticker)
+                prediction=sm.predict(self.ticker)
                 today = qtc.QDate.currentDate().toString(qtc.Qt.ISODate)
 
                 date_input.setPlaceholderText('yyyy-mm-dd between {} and {}'.format(
